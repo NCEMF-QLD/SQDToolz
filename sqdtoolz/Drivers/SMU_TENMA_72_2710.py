@@ -183,7 +183,6 @@ class SMU_TENMA_72_2710(Instrument):
             cv = True # Power supply is in Constant Voltage mode
         else:
             cv = False # Power supply is in Constant Current mode
-
         return output, cv
         
     def get_idn(self):
