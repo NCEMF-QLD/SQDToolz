@@ -25,7 +25,7 @@ import time
 class SW_DCsmuBoxPort(InstrumentChannel):
     def __init__(self, parent, name, index):
         '''
-        A microwave switch.
+        An instrument channel (port) in the DC SMU switch box.
 
         Arguments:
             portmap: `dict` with `str`:`SwitchPort` items
@@ -95,6 +95,34 @@ class SW_DCsmuBox(Instrument):
         self.write(cmd)
         ret_str = self.ser.read(1)
         return ret_str
+    
+    def set_ports_to_default(self, default_pos='Pground'):
+        """Set all ports to the specified default position."""
+        print(f"Setting all ports to default position: {default_pos}")
+        for i in range(1, 17):
+            port_number = f'Port{i}'
+            port_obj = getattr(self, port_number)
+
+            if port_obj.Position != default_pos:
+                port_obj.Position = default_pos
+
+            # pos = port_obj.Position
+            # print(f'{port_number}.Position: {pos}')
+
+    def print_port_positions(self):
+        """Print the current position of all ports."""
+        for i in range(1,17):
+
+            port_number = f'Port{i}'
+
+            port_obj = getattr(self, port_number)
+
+            pos = port_obj.Position
+
+            print(f'{port_number}.Position: {pos}')  
+
+
+
 
 if __name__ == '__main__':
     test = SW_DCsmuBox('bob', '/dev/ttyUSB0')   #VISA Address for COM3 is ASRL3
