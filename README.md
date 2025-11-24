@@ -58,7 +58,7 @@ Now activate the environment in the usual manner (i.e. run the script `activate`
 
 ```
 cd C:/Users/....../myFolder/
-git clone https://github.com/sqdlab/sqdtoolz.git
+git clone https://github.com/NCEMF-QLD/SQDToolz.git
 ```
 
 Now (noting that the command line is still inside the active virtual environment), run:
