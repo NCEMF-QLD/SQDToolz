@@ -35,7 +35,7 @@ Now choose a folder to house the SQDToolz stack (idea is to create an editable f
 
 ```
 cd C:/Users/....../myFolder/
-git clone https://github.com/sqdlab/sqdtoolz.git
+git clone https://github.com/NCEMF-QLD/SQDToolz.git
 ```
 
 Now there is a sqdtoolz folder in the current directory. Do not enter this new folder. Simply run:
