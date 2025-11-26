@@ -226,10 +226,10 @@ class Keysight_N9323C(VisaInstrument):
         self.sense_frequency_start(vals)
 
     @property
-    def FrequencyStop(self):        
+    def FrequencyEnd(self):        
         return self.sense_frequency_stop()
-    @FrequencyStop.setter
-    def FrequencyStop(self, vals):
+    @FrequencyEnd.setter
+    def FrequencyEnd(self, vals):
         self.sense_frequency_stop(vals)
     
     @property
@@ -261,6 +261,7 @@ class Keysight_N9323C(VisaInstrument):
         return self.sense_sweep_time()
     @IntegrationTime.setter
     def IntegrationTime(self, vals):
+        self.write('SENSe:SWEep:TIME:AUTO 0')  # disable auto sweep time first
         self.sense_sweep_time(vals)
 
     @property
