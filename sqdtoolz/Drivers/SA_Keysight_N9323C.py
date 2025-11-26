@@ -127,6 +127,16 @@ class Keysight_N9323C(VisaInstrument):
             vals=vals.Numbers(),
             docstring="Set or get the instrument sweep time."
         )
+        self.add_parameter(
+            name='sense_sweep_points', 
+            label = 'Sense Sweep Points: 461', 
+            unit = 'a.u.',
+            # get_cmd= f'SENSe:SWEep:POINts?',
+            get_parser=int,
+            # set_cmd = f'SENSe:SWEep:POINts {{}}',
+            # vals=vals.Numbers(),
+            docstring="Get the instrument sweep points."
+        )
         # turns on/off auto sweep time state
         ###################################
         ############# does not work!!! revisit
@@ -246,11 +256,19 @@ class Keysight_N9323C(VisaInstrument):
         self.sense_auto_sweep_enable(bool(vals))
 
     @property
-    def SweepTime(self):        
+    # Sweep time is called integration time in HAL of sqdtoolz
+    def IntegrationTime(self):        
         return self.sense_sweep_time()
-    @SweepTime.setter
-    def SweepTime(self, vals):
+    @IntegrationTime.setter
+    def IntegrationTime(self, vals):
         self.sense_sweep_time(vals)
+
+    @property
+    def SweepPoints(self):        
+        return 461
+    @SweepPoints.setter
+    def SweepPoints(self, vals):
+        raise NotImplementedError("Sweep points is fixed to 461 in this model.")
 
 
     @property
