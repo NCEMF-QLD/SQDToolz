@@ -203,7 +203,7 @@ class SiglentSPD4306Channel(InstrumentChannel):
         return output, cv
 
 
-class SiglentSPD4306(VisaInstrument):
+class SMU_Siglent_SPD4306X(VisaInstrument):
     """Qcodes driver for controlling 4 channel SiglentSPD4306
        Comms through LAN by default.The driver is written to use this as a power source.
        It can also be used as a SMU with appropriate modification to the driver. See user manual.
