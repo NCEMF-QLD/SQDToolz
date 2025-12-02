@@ -127,6 +127,16 @@ class Keysight_N9323C(VisaInstrument):
             vals=vals.Numbers(),
             docstring="Set or get the instrument sweep time."
         )
+        self.add_parameter(
+            name='sense_sweep_points', 
+            label = 'Sense Sweep Points: 461', 
+            unit = 'a.u.',
+            # get_cmd= f'SENSe:SWEep:POINts?',
+            get_parser=int,
+            # set_cmd = f'SENSe:SWEep:POINts {{}}',
+            # vals=vals.Numbers(),
+            docstring="Get the instrument sweep points."
+        )
         # turns on/off auto sweep time state
         ###################################
         ############# does not work!!! revisit
@@ -216,10 +226,10 @@ class Keysight_N9323C(VisaInstrument):
         self.sense_frequency_start(vals)
 
     @property
-    def FrequencyStop(self):        
+    def FrequencyEnd(self):        
         return self.sense_frequency_stop()
-    @FrequencyStop.setter
-    def FrequencyStop(self, vals):
+    @FrequencyEnd.setter
+    def FrequencyEnd(self, vals):
         self.sense_frequency_stop(vals)
     
     @property
@@ -246,11 +256,20 @@ class Keysight_N9323C(VisaInstrument):
         self.sense_auto_sweep_enable(bool(vals))
 
     @property
-    def SweepTime(self):        
+    # Sweep time is called integration time in HAL of sqdtoolz
+    def IntegrationTime(self):        
         return self.sense_sweep_time()
-    @SweepTime.setter
-    def SweepTime(self, vals):
+    @IntegrationTime.setter
+    def IntegrationTime(self, vals):
+        self.write('SENSe:SWEep:TIME:AUTO 0')  # disable auto sweep time first
         self.sense_sweep_time(vals)
+
+    @property
+    def SweepPoints(self):        
+        return 461
+    @SweepPoints.setter
+    def SweepPoints(self, vals):
+        raise NotImplementedError("Sweep points is fixed to 461 in this model.")
 
 
     @property
@@ -290,14 +309,66 @@ class Keysight_N9323C(VisaInstrument):
     
  
     def get_data(self, **kwargs):
-        self.write('INIT:CONT OFF')
-        self.ask('*CLS;INIT:IMM;*OPC?') # instead of *CLS maybe *RST
-        # This query command returns the current displayed ascii data, not binary data
-        wfm_data = self.visa_handle.query_ascii_values('trace:data? trace1', separator= ',', converter='f')
-
         ############# Number of points in frequency sweep is fixed to be 461 ###############
         ############# in this spectrum analyser model Keysight N9323C        ###############
-        wfm_x = np.linspace(self.sense_frequency_start(), self.sense_frequency_stop(), 461)
+        # if no data stitching
+        # self.write('INIT:CONT OFF') # trigger a single sweep
+        # self.ask('*CLS;INIT:IMM;*OPC?') # clears the analyser; trigger a sweep and delay for sweep to complete; Operation Complete Query 
+        #    # (this query stops any new commands from being processed until the current processing is cmplete); if *CLS has bugs, maybe *RST
+        # This query command returns the current displayed ascii data, not binary data
+        # wfm_data = self.visa_handle.query_ascii_values('trace:data? trace1', separator= ',', converter='f')
+        # wfm_x = np.linspace(self.sense_frequency_start(), self.sense_frequency_stop(), 461)
+        ############# data stitching implemented below ###############
+        ############# for span > 500 MHz, since max span with 461 points is 500 MHz ###############
+         ############# each segment has 461 points ###############  
+        # if data stitching is needed, 500 MHz span per segment with the 461 points
+        span = self.sense_frequency_span()
+        start_freq = self.sense_frequency_start()
+        stop_freq = self.sense_frequency_stop()
+
+        average_state = self.AveragesEnable
+        average_count = self.AveragesNum
+
+
+        print(f"Start frequency: {start_freq} Hz")
+        print(f"Stop frequency: {stop_freq} Hz")
+        print(f"average: {average_count} counts, enabled: {average_state}")
+
+        num_segments = int(np.ceil(span / 5e8))
+        freqs_per_segment = []
+        for seg in range(num_segments):
+            seg_start = start_freq + seg * 5e8
+            seg_stop = min(seg_start + 5e8, stop_freq)
+            freqs = np.linspace(seg_start, seg_stop, 461)
+            freqs_per_segment.append(freqs)
+        wfm_x = np.concatenate(freqs_per_segment)
+        wfm_data = []
+        for seg in range(num_segments):
+            seg_start = start_freq + seg * 5e8
+            seg_stop = min(seg_start + 5e8, stop_freq)
+            self.write(f'FREQ:STAR {seg_start}')
+            self.write(f'FREQ:STOP {seg_stop}')
+            
+            self.write('INIT:CONT OFF')# trigger a single sweep
+            self.ask('*CLS;INIT:IMM;*OPC?') # clears the analyser; trigger a sweep and delay for sweep to complete; Operation Complete Query 
+            # (this query stops any new commands from being processed until the current processing is cmplete); if *CLS has bugs, maybe *RST
+            self.write(f':AVERage:TRACe1:STATe {int(average_state)}')  # enable average
+            self.write(f':AVERage:TRACe1:COUNt {average_count}')  # set average count
+            self.write(':AVERage:TRACe1:CLEar')  # restart average  
+            # wait for the averaging to complete    
+            seg_data = self.visa_handle.query_ascii_values('trace:data? trace1', separator= ',', converter='f') # This query command returns the current displayed ascii data, not binary data
+            wfm_data.extend(seg_data)
+
+        # restore the original start and stop frequency
+        self.write(f'FREQ:STAR {wfm_x[0]}')  
+        self.write(f'FREQ:STOP {wfm_x[-1]}')
+        self.write('INIT:CONT 1')# set back to continuous sweep
+
+
+
+
+
+    
         
         ret_data = {
             'parameters' : ['Frequency'],
