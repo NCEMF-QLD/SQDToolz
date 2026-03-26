@@ -13,7 +13,7 @@ from qcodes.utils import validators as vals
 logger = logging.getLogger()
 import time
 
-class SW_DCsmuBoxPort(InstrumentChannel):
+class SW_DC_BBoxPort(InstrumentChannel):
     def __init__(self, parent, name, index):
         '''
         An instrument channel (port) in the DC SMU switch box.
@@ -57,7 +57,7 @@ class SW_DCsmuBoxPort(InstrumentChannel):
     def get_all_switch_contacts(self):
         return self._lestates[:]
 
-class SW_DCsmuBox(Instrument):
+class SW_DC_BBBox(Instrument):
     """
     DC SMU Switch Box driver
 
