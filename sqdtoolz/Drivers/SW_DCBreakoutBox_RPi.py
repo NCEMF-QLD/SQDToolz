@@ -1,20 +1,11 @@
-"""
-This is a driver for the Stahl power supplies
-"""
-
 import logging
-import re
-from collections import OrderedDict
-from functools import partial
-from typing import Any, Callable, Dict, Iterable, Optional
-
-import numpy as np
+from typing import Any
 
 import serial
 
 from qcodes import Instrument
 
-from qcodes.instrument import ChannelList, InstrumentChannel, VisaInstrument
+from qcodes.instrument import InstrumentChannel
 from qcodes.utils.validators import Numbers
 
 from qcodes.utils import validators as vals
@@ -52,7 +43,7 @@ class SW_DCsmuBoxPort(InstrumentChannel):
             except:
                 pass
             tries -= 1
-        assert False, "Issue querying switch state?"
+        assert False, "Issue querying switch state for {self.name}"
 
     @property
     def Position(self):
@@ -78,7 +69,14 @@ class SW_DCsmuBox(Instrument):
     def __init__(self, name: str, address: str, ports = [f"Port{x}" for x in range(1,10)] + [f"Port{x}" for x in range(13,17)] + [f"Port{x}" for x in range(10,13)], **kwargs: Any):
         super().__init__(name, **kwargs)
 
-        self.ser = serial.Serial(port=address, baudrate=9600, stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=1)
+        self.ser = serial.serial_for_url(
+                                url=address,
+                                baudrate=9600,
+                                stopbits=serial.STOPBITS_ONE,
+                                bytesize=serial.EIGHTBITS,
+                                timeout=5
+                                )
+
         self._lestates = ["Psense", "Pforce", "Pground", "Pbnc", "Popen"]
         
         for m, cur_port in enumerate(ports):
@@ -123,10 +121,8 @@ class SW_DCsmuBox(Instrument):
             print(f'{port_number}.Position: {pos}')  
 
 
-
-
 if __name__ == '__main__':
-    test = SW_DCsmuBox('bob', '/dev/ttyUSB0')   #VISA Address for COM3 is ASRL3
+    test = SW_DCsmuBox('bob', 'rfc2217://10.200.2.145:2217')   #VISA Address for COM3 is ASRL3
     x = test.Port1.Position
     test.Port2.Position = 'Pforce'
     a=0
