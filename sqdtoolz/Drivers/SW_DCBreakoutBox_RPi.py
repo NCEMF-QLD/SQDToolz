@@ -57,7 +57,7 @@ class SW_DC_BBoxPort(InstrumentChannel):
     def get_all_switch_contacts(self):
         return self._lestates[:]
 
-class SW_DC_BBBox(Instrument):
+class SW_DC_BBox(Instrument):
     """
     DC SMU Switch Box driver
 
