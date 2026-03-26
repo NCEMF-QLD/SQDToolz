@@ -214,7 +214,7 @@ class SMU_B2901A(VisaInstrument):
         self.volt_force.inter_delay = self.volt_force.step / ramp_rate
 
     def _set_ramp_rate_current(self, ramp_rate):
-        if ramp_rate < 0.01:
+        if ramp_rate < 0.01:    
             self.current_force.step = 0.001
         elif ramp_rate < 0.1:
             self.current_force.step = 0.010
