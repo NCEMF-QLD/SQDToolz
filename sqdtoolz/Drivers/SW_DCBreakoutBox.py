@@ -3,21 +3,10 @@ This is a driver for the Stahl power supplies
 """
 
 import logging
-import re
-from collections import OrderedDict
-from functools import partial
-from typing import Any, Callable, Dict, Iterable, Optional
-
-import numpy as np
-
+from typing import Any
 import serial
-
 from qcodes import Instrument
-
-from qcodes.instrument import ChannelList, InstrumentChannel, VisaInstrument
-from qcodes.utils.validators import Numbers
-
-from qcodes.utils import validators as vals
+from qcodes.instrument import InstrumentChannel
 
 logger = logging.getLogger()
 import time
