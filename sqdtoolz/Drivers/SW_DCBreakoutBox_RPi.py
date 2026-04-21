@@ -55,7 +55,7 @@ class SW_DC_BBoxPort(InstrumentChannel):
         self._parent.write([msg])
 
     def get_all_switch_contacts(self):
-        return self._lestates[:]
+        return self._parent._lestates[:]
 
 class SW_DC_BBox(Instrument):
     """
@@ -119,6 +119,9 @@ class SW_DC_BBox(Instrument):
             pos = port_obj.Position
 
             print(f'{port_number}.Position: {pos}')  
+
+    def get_all_switch_contacts(self):
+        return self._lestates[:]
 
 
 if __name__ == '__main__':
