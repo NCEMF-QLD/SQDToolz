@@ -81,6 +81,7 @@ class SW_DC_BBox(Instrument):
         
         for m, cur_port in enumerate(ports):
             self.add_submodule(cur_port, SW_DC_BBoxPort(self, cur_port, m))
+            self.add_submodule(cur_port, SW_DC_BBoxPort(self, cur_port, m))
 
     def get_idn(self):
         return 'DC SMU Switch Box'
@@ -125,6 +126,7 @@ class SW_DC_BBox(Instrument):
 
 
 if __name__ == '__main__':
-    test = SW_DCsmuBox('bob', 'rfc2217://10.200.2.145:2217')  #ip address for the RFC server running on rpi
+    test = SW_DCsmuBox('bob', 'rfc2217://10.200.2.145:2217')   #VISA Address for COM3 is ASRL3
+    x = test.Port1.Position
     test.Port2.Position = 'Pforce'
     a=0
