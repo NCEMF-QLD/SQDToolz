@@ -81,7 +81,6 @@ class SW_DC_BBox(Instrument):
         
         for m, cur_port in enumerate(ports):
             self.add_submodule(cur_port, SW_DC_BBoxPort(self, cur_port, m))
-            self.add_submodule(cur_port, SW_DC_BBoxPort(self, cur_port, m))
 
     def get_idn(self):
         return 'DC SMU Switch Box'
