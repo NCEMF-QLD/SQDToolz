@@ -45,12 +45,22 @@ class SW_DC_BBoxPort(InstrumentChannel):
             tries -= 1
         assert False, "Issue querying switch state for {self.name}"
 
+    # @property
+    # def Position(self):
+    #     return str(self.state())
+    # @Position.setter
+    # def Position(self, pos):
+    #     state_val = self._parent._lestates.index(pos)
+    #     msg = (state_val << 5) | self._port
+    #     self._parent.write([msg])
+
     @property
     def Position(self):
-        return str(self.state())
+        return self._parent._lestates.index(self.state())
+
     @Position.setter
-    def Position(self, pos):
-        state_val = self._parent._lestates.index(pos)
+    def Position(self, idx):
+        state_val = idx
         msg = (state_val << 5) | self._port
         self._parent.write([msg])
 
@@ -80,7 +90,6 @@ class SW_DC_BBox(Instrument):
         self._lestates = ["Psense", "Pforce", "Pground", "Pbnc", "Popen"]
         
         for m, cur_port in enumerate(ports):
-            self.add_submodule(cur_port, SW_DC_BBoxPort(self, cur_port, m))
             self.add_submodule(cur_port, SW_DC_BBoxPort(self, cur_port, m))
 
     def get_idn(self):
