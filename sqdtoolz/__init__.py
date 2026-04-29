@@ -26,6 +26,7 @@ from sqdtoolz.HAL.GENsmu import GENsmu
 from sqdtoolz.HAL.WaveformSegments import*
 from sqdtoolz.HAL.WaveformMapper import*
 from sqdtoolz.HAL.WaveformTransformations import*
+from sqdtoolz.HAL.GENbreakoutBox import GENbreakoutBox
 
 from sqdtoolz.HAL.Processors.ProcessorCPU import*
 try:

@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 
  
 
-class Keysight_N9323C(VisaInstrument):
+class SA_Keysight_N9323C(VisaInstrument):
     """
     QCoDeS driver for KeysightSA_N9323C.
     """
@@ -269,7 +269,8 @@ class Keysight_N9323C(VisaInstrument):
         return 461
     @SweepPoints.setter
     def SweepPoints(self, vals):
-        raise NotImplementedError("Sweep points is fixed to 461 in this model.")
+        return "Set to 461 by default"
+        # raise NotImplementedError("Sweep points is fixed to 461 in this model.")
 
 
     @property
@@ -330,9 +331,9 @@ class Keysight_N9323C(VisaInstrument):
         average_count = self.AveragesNum
 
 
-        print(f"Start frequency: {start_freq} Hz")
-        print(f"Stop frequency: {stop_freq} Hz")
-        print(f"average: {average_count} counts, enabled: {average_state}")
+        # print(f"Start frequency: {start_freq} Hz")
+        # print(f"Stop frequency: {stop_freq} Hz")
+        # print(f"average: {average_count} counts, enabled: {average_state}")
 
         num_segments = int(np.ceil(span / 5e8))
         freqs_per_segment = []

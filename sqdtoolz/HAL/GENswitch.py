@@ -7,6 +7,9 @@ class GENswitch(HALbase):
         self._instr_id = instr_switch
         self._instr_switch = lab._get_instrument(instr_switch)
         self._switch_contacts = self._instr_switch.get_all_switch_contacts()
+        # explicitly expose port submodules
+        for port_name in self._instr_switch.submodules:
+            setattr(self, port_name, getattr(self._instr_switch, port_name))
         lab._register_HAL(self)
 
     @classmethod
@@ -36,3 +39,4 @@ class GENswitch(HALbase):
     def _set_current_config(self, dict_config, lab):
         assert dict_config['Type'] == self.__class__.__name__, 'Cannot set configuration to a Switch with a configuration that is of type ' + dict_config['Type']
         self.Position = dict_config['Position']
+

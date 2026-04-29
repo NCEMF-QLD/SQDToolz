@@ -45,17 +45,27 @@ class SW_DC_BBoxPort(InstrumentChannel):
             tries -= 1
         assert False, "Issue querying switch state for {self.name}"
 
+    # @property
+    # def Position(self):
+    #     return str(self.state())
+    # @Position.setter
+    # def Position(self, pos):
+    #     state_val = self._parent._lestates.index(pos)
+    #     msg = (state_val << 5) | self._port
+    #     self._parent.write([msg])
+
     @property
     def Position(self):
-        return str(self.state())
+        return self._parent._lestates.index(self.state())
+
     @Position.setter
-    def Position(self, pos):
-        state_val = self._parent._lestates.index(pos)
+    def Position(self, idx):
+        state_val = idx
         msg = (state_val << 5) | self._port
         self._parent.write([msg])
 
     def get_all_switch_contacts(self):
-        return self._lestates[:]
+        return self._parent._lestates[:]
 
 class SW_DC_BBox(Instrument):
     """
@@ -63,7 +73,7 @@ class SW_DC_BBox(Instrument):
 
     Args:
         name
-        address: A serial port address
+        address: RFC server address running on rpi 
     """
 
     def __init__(self, name: str, address: str, ports = [f"Port{x}" for x in range(1,10)] + [f"Port{x}" for x in range(13,17)] + [f"Port{x}" for x in range(10,13)], **kwargs: Any):
@@ -119,6 +129,9 @@ class SW_DC_BBox(Instrument):
             pos = port_obj.Position
 
             print(f'{port_number}.Position: {pos}')  
+
+    def get_all_switch_contacts(self):
+        return self._lestates[:]
 
 
 if __name__ == '__main__':

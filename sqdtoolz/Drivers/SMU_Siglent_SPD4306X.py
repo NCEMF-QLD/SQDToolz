@@ -165,6 +165,7 @@ class SiglentSPD4306Channel(InstrumentChannel):
         else:
             self.voltage.step = 1.0
         self.voltage.inter_delay = self.voltage.step / ramp_rate
+        print(self.voltage.step, self.voltage.inter_delay)
 
     @property
     def RampRateCurrent(self):
