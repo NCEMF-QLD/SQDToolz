@@ -135,7 +135,7 @@ class SW_DC_BBox(Instrument):
 
 
 if __name__ == '__main__':
-    test = SW_DCsmuBox('bob', 'rfc2217://10.200.2.145:2217')   #VISA Address for COM3 is ASRL3
+    test = SW_DC_BBox('bob', 'rfc2217://10.200.2.145:2217')   #VISA Address for COM3 is ASRL3
     x = test.Port1.Position
     test.Port2.Position = 'Pforce'
     a=0
