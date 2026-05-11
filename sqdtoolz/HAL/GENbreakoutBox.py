@@ -36,7 +36,7 @@ class GENbreakoutBox(HALbase):
                     raise ValueError(f"Port {port} not found in breakout box.")
         else:
             pos_array = np.asarray(pos_input, dtype=int)
-            
+            # print(pos_input)
             if len(pos_array) > len(self._ports):
                 raise ValueError(f"Array length {len(pos_array)} exceeds number of ports {len(self._ports)}")
             
@@ -45,9 +45,10 @@ class GENbreakoutBox(HALbase):
                 if pos < 0 or pos >= len(states):
                     raise ValueError(f"Index {pos} out of range [0, {len(states)-1}] for states {states}")
                 port = str(self._ports[i])
-                print(f'Debug: port {port}')
-                time.sleep(1.0)
+                # print(f'Debug: port {port}')
                 getattr(self._instr_box, port).Position = pos
+                time.sleep(1.0)
+
 
     def get_possible_contacts(self):
         # Assume all ports have the same possible states (from the instrument)
