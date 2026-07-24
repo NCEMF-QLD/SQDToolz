@@ -11,10 +11,10 @@ class SW_RFSwitchController_CryoRadiall_Channel(InstrumentChannel):
         self._switch_type = switch_type
         self._current_state = 'P0'
         if switch_type == 'Daisy':
-            self._allowed_states = ['P0','P1', 'P2', 'P3', 'P4', 'P5', 'P6']
+            self._allowed_states = ['P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6']
             self._daisy_engage_pair("P0",False)  #Disengage all relays
         else:
-            self._allowed_states = ['P0','P1', 'P2', 'P3', 'P4', 'P5']
+            self._allowed_states = ['P0', 'P1', 'P2', 'P3', 'P4', 'P5']
             assert False, "Individual Reset untested."
 
     def _latch_all_relays(self):

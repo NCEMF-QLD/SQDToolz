@@ -1,13 +1,15 @@
-import time
-from turtle import mode
+import sys
 
-from qcodes import Instrument, InstrumentChannel, VisaInstrument, validators as vals
+from qcodes import VisaInstrument, validators as vals
 import numpy as np
 
 class SMU_B2901B(VisaInstrument):
     """This class represents and controls a Keysight B2901B SMU. For operating
     details of this instrument, refer to Keysight document B2910-90030, titled
     "Keysight B2900 SCPI Command Reference". Expanded with fast sweep/list mode."""
+
+    MAX_LIST_POINTS = 100000
+    LIST_UPLOAD_CHUNK_SIZE = 1000
 
     def __init__(self, name, address, **kwargs):
         super().__init__(name, address, **kwargs)
@@ -17,20 +19,19 @@ class SMU_B2901B(VisaInstrument):
         self.expectedModel = "B2901B"
         self.VID = 0x0957
         self.PID = 0x8b18
-        #instrument-specific additional setup
-        self.write("*ESE 1")    #enable summary of bit 0, Event Status register, to enable *OPC monitoring
-        self.write("*SRE 32")   #enable summary of bit 5, Status Byte, to enable *OPC monitoring
+        # A reconnect must never inherit an active or unprotected output.
+        # Configure protection before any source or range setting is changed.
+        self._write_checked(':OUTP OFF')
+        self._write_checked(':OUTP:PROT ON')
 
-        #Set to auto-ranging
-        self.write(':RANG:AUTO:VOLT ON')
-        self.write(':RANG:AUTO:CURR ON')
-        #Setup compliance checks
-        self.write(':OUTP:PROT OFF')
-        self.write(':CALC:LIM:FUNC COMP')
-        self.write(':CALC:LIM:COMP:FAIL OUT')
-        self.write(":CALC:LIM:STAT 0")
-        # self.write(":CALC:LIM:STAT?") WHY DOES self.ask(":SENS:CURR:PROT:TRIP?") NOT WORK?!?!?!?
-        #TODO: Currently it sends out nan for compliance hit; but that isn't realiable. Figure out how to get TRIP working so that it returns a nice saturated compliance value instead...
+        # Source and measurement range are independent on the B2900B.
+        for command in (
+            ':SOUR:VOLT:RANG:AUTO ON',
+            ':SOUR:CURR:RANG:AUTO ON',
+            ':SENS:VOLT:RANG:AUTO ON',
+            ':SENS:CURR:RANG:AUTO ON',
+        ):
+            self._write_checked(command)
 
         self.add_parameter('volt_force',
                            label='Output Voltage',
@@ -175,55 +176,52 @@ class SMU_B2901B(VisaInstrument):
                             get_parser=float)
         
 
-        
-        self._sweep_direction = 'UP'
-        self._sweep_dir_mode = 'SING'
-        self._sweep_list = []
-        self._dwell_time = 10E-3
+        self._sweep_list = None
+        self._sweep_list_mode = None
 
     @property
     def Mode(self):
         return self.mode()
     @Mode.setter
     def Mode(self, mode):
+        if mode not in ('SrcV_MeasI', 'SrcI_MeasV'):
+            raise ValueError('Mode must be SrcV_MeasI or SrcI_MeasV')
+        self._ensure_output_off('changing source mode')
         self.mode(mode)
-        self.write(':OUTP:PROT ON')
+        self._raise_if_instrument_error('setting source mode')
+        self._write_checked(':OUTP:PROT ON')
         if mode == 'SrcV_MeasI':
-            self.write(':SENS:FUNC CURR')
+            self._write_checked(':SENS:FUNC "CURR"')
         else:
-            self.write(':SENS:FUNC VOLT')
+            self._write_checked(':SENS:FUNC "VOLT"')
 
     @property
     def Output(self):
         return self.output()
     @Output.setter
     def Output(self, val):
-        self._last_user_output_state = val
-        self.write(':OUTP:PROT ON')
-        self.output(val)
+        if val:
+            self._write_checked(':OUTP:PROT ON')
+            self.output(True)
+            self._raise_if_instrument_error('enabling output')
+        else:
+            self._abort_and_disable_output()
+            self._wait_for_operation_complete(5.0)
+        self._last_user_output_state = bool(val)
 
     @property
     def Voltage(self):
         return self.volt_force()
     @Voltage.setter
     def Voltage(self, val):
-        # temp = self._last_user_output_state
-        # self.Output = False
         self.volt_force(val)
-        # self._last_user_output_state = temp
-        # self.Output = self._last_user_output_state
 
     @property
     def Current(self):
         return self.current_force()
     @Current.setter
     def Current(self, val):
-        #TODO: This is bad as it literally sets the output to zero - can the device be unlocked without turning output explicitly off?!
-        # temp = self._last_user_output_state
-        # self.Output = False
         self.current_force(val)
-        # self._last_user_output_state = temp
-        # self.Output = self._last_user_output_state
 
     @property
     def SenseVoltage(self):
@@ -281,6 +279,8 @@ class SMU_B2901B(VisaInstrument):
     
     @property
     def SweepSamplePoints(self):
+        if self.SweepMode == 'LIST':
+            return self._get_active_sweep_list().size
         if self.mode() == 'SrcV_MeasI':
             return self.sweep_v_points()
         else:
@@ -288,6 +288,8 @@ class SMU_B2901B(VisaInstrument):
 
     @SweepSamplePoints.setter
     def SweepSamplePoints(self, val):
+        if self.SweepMode == 'LIST':
+            raise ValueError('LIST sweep point count is defined by SweepList')
         if self.mode() == 'SrcV_MeasI':
             self.sweep_v_points(val)
         else:
@@ -329,18 +331,16 @@ class SMU_B2901B(VisaInstrument):
 
     @property
     def SweepMode(self):
-        if self.mode() == 'SrcV_MeasI':
-            return self.sweep_v_mode()
-        else:
-            return self.sweep_i_mode()
+        return self._get_sweep_mode()
     @SweepMode.setter
     def SweepMode(self, val):
-        assert val in ('SWE', 'LIST'), "Sweep mode must be SWE or LIST"
-        if self.mode() == 'SrcV_MeasI':
-            self.sweep_v_mode(val)
-        else:
-            self.sweep_i_mode(val)
-        # print(f"DEBUG: Set sweep mode to {val}")
+        if val not in ('SWE', 'LIST'):
+            raise ValueError('Sweep mode must be SWE or LIST')
+        self._ensure_output_off('changing sweep mode')
+        self._set_sweep_mode(val)
+        self._raise_if_instrument_error('setting sweep mode')
+        if self.SweepMode != val:
+            raise RuntimeError(f'B2901B did not enter {val} sweep mode')
     
     @property
     def SweepRepeat(self):
@@ -377,10 +377,7 @@ class SMU_B2901B(VisaInstrument):
         return self._get_sweep_list()
     @SweepList.setter
     def SweepList(self, val):
-        if isinstance(val, (list, np.ndarray)):
-            self._set_sweep_list(val)
-        else:
-            raise ValueError("SweepList must be a list or numpy array of numbers")
+        self._set_sweep_list(val)
 
     @property
     def SampleApertureTime(self):
@@ -411,11 +408,6 @@ class SMU_B2901B(VisaInstrument):
             self.current_force.step = 1.0
         self.current_force.inter_delay = self.current_force.step / ramp_rate
 
-    def _active_sweep_parameters(self):
-            if self.mode() == 'VOLT':
-                return self.sweep_v_start, self.sweep_v_stop, self.sweep_v_points
-            return self.sweep_i_start, self.sweep_i_stop, self.sweep_i_points
-    
     def _set_sweep_mode(self, val):
         cur_mode = self.mode()
         if cur_mode in ('SrcV_MeasI', 'VOLT'):
@@ -435,7 +427,6 @@ class SMU_B2901B(VisaInstrument):
             raise ValueError("Invalid mode for sweep")
        
     def _set_sweep_direction(self, val):
-        self._sweep_direction = val
         if self.SweepMode != 'SWE':
             raise ValueError("SweepDirection is only supported in SWE mode")
         self.write(f':SOUR:SWE:DIR {val.upper()}')
@@ -448,10 +439,8 @@ class SMU_B2901B(VisaInstrument):
     def _set_sweep_dir_mode(self, val):
         if self.SweepMode == 'LIST':
             raise ValueError("STA parameter is not supported for LIST sweep mode. SweepRepeat cannot be set in LIST mode.")
-        # self._sweep_dir_mode = val
         if self.SweepMode == 'SWE':
             self.write(f':SOUR:SWE:STA {val.upper()}')
-        # print(f"DEBUG: Set sweep repeat mode to {val} for sweep mode {self.SweepMode}")
 
     def _get_sweep_dir_mode(self):
         if self.SweepMode == 'LIST':
@@ -460,25 +449,92 @@ class SMU_B2901B(VisaInstrument):
             return self.ask(':SOUR:SWE:STA?').strip()
 
     def _set_sweep_list(self, val):
-        if isinstance(val, (list, np.ndarray)):
-            self._sweep_list = ','.join(str(float(x)) for x in val)
-            self.SweepStartValue = float(min(val))
-            self.SweepEndValue = float(max(val))
-            self.SweepSamplePoints = len(val)
-            if self.Mode == 'SrcV_MeasI':
-                self.write(f':SOUR:LIST:VOLT {self._sweep_list}')
-            elif self.Mode == 'SrcI_MeasV':
-                self.write(f':SOUR:LIST:CURR {self._sweep_list}')
-        else:
-            raise ValueError("SweepList must be a list or numpy array of numbers")
+        self._ensure_output_off('programming SweepList')
+        if self.SweepMode != 'LIST':
+            raise RuntimeError('Set SweepMode to LIST before programming SweepList')
+
+        source_function, source_limit = self._active_list_source()
+        values = self._validate_sweep_list(val, source_limit)
+        formatted_values = [format(value, '.17g') for value in values]
+        for start_index in range(0, values.size, self.LIST_UPLOAD_CHUNK_SIZE):
+            command_suffix = '' if start_index == 0 else ':APP'
+            value_chunk = formatted_values[
+                start_index:start_index + self.LIST_UPLOAD_CHUNK_SIZE
+            ]
+            self._write_checked(
+                f':SOUR:LIST:{source_function}{command_suffix} {",".join(value_chunk)}'
+            )
+
+        programmed_points = self._get_programmed_list_points(source_function)
+        if programmed_points != values.size:
+            raise RuntimeError(
+                'B2901B did not accept the complete list: '
+                f'uploaded {values.size} points, instrument reports {programmed_points}'
+            )
+
+        self._sweep_list = values
+        self._sweep_list_mode = self.Mode
         
     def _get_sweep_list(self):
+        return self._get_active_sweep_list().copy()
+
+    def _active_list_source(self):
         if self.Mode == 'SrcV_MeasI':
-            return self.ask(f':SOUR:LIST:VOLT?').split(',')
-        elif self.Mode == 'SrcI_MeasV':
-            return self.ask(f':SOUR:LIST:CURR?').split(',')
-        else:
-            raise ValueError("Invalid mode for sweep list")
+            return 'VOLT', 210.0
+        if self.Mode == 'SrcI_MeasV':
+            return 'CURR', 3.0
+        raise ValueError('Invalid source mode for SweepList')
+
+    def _validate_sweep_list(self, values, source_limit):
+        if not isinstance(values, (list, tuple, np.ndarray)):
+            raise TypeError('SweepList must be a one-dimensional list, tuple, or numpy array')
+
+        raw_values = np.asarray(values, dtype=object)
+        if raw_values.ndim != 1:
+            raise ValueError('SweepList must be one-dimensional')
+        if raw_values.size < 2:
+            raise ValueError('SweepList must contain at least two points')
+        if raw_values.size > self.MAX_LIST_POINTS:
+            raise ValueError(
+                f'SweepList exceeds the {self.MAX_LIST_POINTS}-point instrument limit'
+            )
+        if any(
+            isinstance(value, (bool, np.bool_, str, bytes, complex, np.complexfloating))
+            for value in raw_values
+        ):
+            raise ValueError('SweepList values must be real numbers')
+
+        try:
+            numeric_values = np.asarray(values, dtype=float)
+        except (TypeError, ValueError) as error:
+            raise ValueError('SweepList values must be real numbers') from error
+
+        if not np.isfinite(numeric_values).all():
+            raise ValueError('SweepList values must be finite')
+        if np.any(np.abs(numeric_values) > source_limit):
+            raise ValueError(
+                f'SweepList values must be within +/-{source_limit:g} of the active source'
+            )
+        return numeric_values.copy()
+
+    def _get_programmed_list_points(self, source_function):
+        response = self.ask(f':SOUR:LIST:{source_function}:POIN?').strip()
+        self._raise_if_instrument_error('verifying SweepList')
+        try:
+            return int(response)
+        except ValueError as error:
+            raise RuntimeError(
+                f'Unexpected B2901B list-point response: {response!r}'
+            ) from error
+
+    def _get_active_sweep_list(self):
+        if self._sweep_list is None:
+            raise RuntimeError('No SweepList has been programmed')
+        if self._sweep_list_mode != self.Mode:
+            raise RuntimeError(
+                'SweepList belongs to the previous source mode; program a new list'
+            )
+        return self._sweep_list
 
     def _set_aperture_time(self, val):
         if self.Mode == 'SrcV_MeasI':
@@ -491,6 +547,53 @@ class SMU_B2901B(VisaInstrument):
             return self.ask(':SENS:CURR:APER?')
         else:
             return self.ask(':SENS:VOLT:APER?')
+
+    def _raise_if_instrument_error(self, context):
+        error = self.ask(':SYST:ERR?').strip()
+        if error.startswith(('+0', '0')):
+            return
+        raise RuntimeError(f'B2901B error while {context}: {error}')
+
+    def _write_checked(self, command):
+        self.write(command)
+        self._raise_if_instrument_error(f'executing {command!r}')
+
+    def _abort_and_disable_output(self):
+        """Best-effort abort followed by the command that stops output."""
+        try:
+            self.write(':ABOR')
+        except Exception:
+            # :OUTP OFF also stops a measurement, so it is still the essential
+            # cleanup command if the abort itself fails.
+            pass
+        self.write(':OUTP OFF')
+        if hasattr(self, '_last_user_output_state'):
+            self._last_user_output_state = False
+
+    def _ensure_output_off(self, operation):
+        if self.Output:
+            raise RuntimeError(f'Disable the output before {operation}')
+        self._wait_for_operation_complete(5.0)
+        if self.Output:
+            raise RuntimeError(f'B2901B output remained enabled before {operation}')
+        self._raise_if_instrument_error(f'before {operation}')
+
+    def _wait_for_operation_complete(self, minimum_timeout):
+        """Wait for the instrument rather than estimating sweep completion."""
+        original_timeout = self.timeout()
+        temporary_timeout = (
+            None if original_timeout is None
+            else max(float(original_timeout), float(minimum_timeout))
+        )
+
+        if temporary_timeout != original_timeout:
+            self.timeout(temporary_timeout)
+        try:
+            if self.ask('*OPC?').strip() != '1':
+                raise RuntimeError('B2901B did not report operation complete')
+        finally:
+            if temporary_timeout != original_timeout:
+                self.timeout(original_timeout)
  
     def _estimate_sweep_time(self):
         sweep_points = int(self.SweepSamplePoints)
@@ -504,62 +607,83 @@ class SMU_B2901B(VisaInstrument):
         sweep_total_time = points * (aperture_time + trig_source_delay + trig_acq_delay)
         return sweep_total_time
     
-    def _start_dwell(self):
-        '''Function let the system dwell at the beginning of the measurement
-        currently not used'''
-        first_val = self.SweepStartValue
-        self.write(':OUTP:PROT ON')
-        self.write(':SOUR:WAIT ON')
-        self.write(':SOUR:WAIT:AUTO OFF')
-        self.write(f':SOUR:WAIT:OFFS {self._dwell_time}')
-        # print(f"DEBUG: Starting dwell with first value {first_val} for dwell time {self._dwell_time} seconds")
-        if self.Mode == 'SrcV_MeasI':
-            self.write(':SOUR:VOLT:MODE FIX')
-            self.volt_force(first_val)
-        else:
-            self.write(':SOUR:CURR:MODE FIX')
-            self.current_force(first_val)
-
     def get_data(self):
-            '''
-            Function to handle Sweep and List Measurement
-            '''
+        '''Function to handle sweep and list measurements.'''
+        sweep_mode = self.SweepMode
+        list_base_command = None
+        if sweep_mode == 'LIST':
+            list_values = self._get_active_sweep_list()
+            source_function, _ = self._active_list_source()
+            programmed_points = self._get_programmed_list_points(source_function)
+            if programmed_points != list_values.size:
+                raise RuntimeError(
+                    'The programmed SweepList no longer matches the driver cache; '
+                    'program the list again before starting a sweep'
+                )
+            trig_points = programmed_points
+            list_base_command = (
+                f':SOUR:{source_function} {format(list_values[0], ".17g")}'
+            )
+        elif sweep_mode == 'SWE':
             assert self.SweepStartValue != self.SweepEndValue, "Must supply different values for the starting and ending values for the sweep..."
             assert self.SweepSamplePoints > 1, "Must have more than 1 sweeping point..."
-
-            if self.SweepMode == 'SWE':
-                if self.SweepRepeat == 'DOUB':
-                    trig_points = int(self.SweepSamplePoints) * 2
-                else:
-                    trig_points = int(self.SweepSamplePoints)
+            if self.SweepRepeat == 'DOUB':
+                trig_points = int(self.SweepSamplePoints) * 2
             else:
                 trig_points = int(self.SweepSamplePoints)
-            # print(f"DEBUG: Trigger points set to {trig_points} based on sweep sample points {self.SweepSamplePoints}")
+        else:
+            raise RuntimeError(f'Unsupported sweep mode: {sweep_mode!r}')
 
-            sweep_total_time = self._estimate_sweep_time()
+        # Completion is confirmed by *OPC?, which includes instrument settling and autoranging.
+        sweep_timeout = self._estimate_sweep_time() + 5.0
+        active_exception = None
 
-            # Generate trigger points by automatic internal algorithm
-            self.write(':TRIG:SOUR AINT')
-            self.write(f':TRIG:COUN {trig_points}')
-
+        try:
+            if list_base_command is not None:
+                self._write_checked(list_base_command)
+            # Generate trigger points by the automatic internal algorithm.
+            self._write_checked(':TRIG:SOUR AINT')
+            self._write_checked(f':TRIG:COUN {trig_points}')
             self.Output = True
 
             self.write(':INIT')
-            # print("DEBUG: Initialized sweep, estimated sweep time (s): ", sweep_total_time)
-            time.sleep(sweep_total_time) #wait for sweep to complete;
-            # print("DEBUG: Sweep wait complete, fetching data...")
+            self._wait_for_operation_complete(sweep_timeout)
+            self._raise_if_instrument_error('running sweep')
 
-            currents_raw = self.ask(':FETC:ARR:CURR?').split(',')
-            voltages_raw = self.ask(':FETC:ARR:VOLT?').split(',')
+            currents = np.array(
+                [float(x) for x in self.ask(':FETC:ARR:CURR?').split(',')]
+            )
+            voltages = np.array(
+                [float(x) for x in self.ask(':FETC:ARR:VOLT?').split(',')]
+            )
 
-            currents = np.array([float(x) for x in currents_raw])
-            voltages = np.array([float(x) for x in voltages_raw])
-
-            self.Output = False
+            if currents.size != trig_points or voltages.size != trig_points:
+                raise RuntimeError(
+                    'B2901B returned an unexpected number of sweep points: '
+                    f'expected {trig_points}, got {currents.size} current and '
+                    f'{voltages.size} voltage values'
+                )
 
             data_pkt = {
-                        'parameters' : ['Points'],
-                        'data' : { 'Current' : currents, 'Voltage' : voltages }
-                    }
-
+                'parameters': ['Points'],
+                'data': {'Current': currents, 'Voltage': voltages},
+            }
             return {'data': data_pkt}
+        except BaseException:
+            active_exception = sys.exc_info()
+            raise
+        finally:
+            try:
+                self._abort_and_disable_output()
+            except Exception:
+                if active_exception is None:
+                    raise
+                self.log.exception('Failed to safely disable the B2901B output')
+
+    def close(self):
+        try:
+            self._abort_and_disable_output()
+        except Exception:
+            self.log.exception('Failed to safely disable the B2901B output during close')
+        finally:
+            super().close()

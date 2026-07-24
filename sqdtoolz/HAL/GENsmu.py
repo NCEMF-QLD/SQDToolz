@@ -126,6 +126,20 @@ class GENsmu(HALbase):
     def SweepEndValue(self, val: float):
         self._instr_smu.SweepEndValue = val
 
+    @property
+    def SweepMode(self):
+        return self._instr_smu.SweepMode
+    @SweepMode.setter
+    def SweepMode(self, val: str):
+        self._instr_smu.SweepMode = val
+
+    @property
+    def SweepList(self):
+        return self._instr_smu.SweepList
+    @SweepList.setter
+    def SweepList(self, values):
+        self._instr_smu.SweepList = values
+
     def get_data(self):
         return self._instr_smu.get_data()
 
@@ -139,11 +153,23 @@ class GENsmu(HALbase):
             }
         self.pack_properties_to_dict(['Mode', 'Voltage', 'Current', 'RampRateVoltage', 'RampRateCurrent', 'ProbeType', 'Output', 'SenseVoltage', 'SenseCurrent', 'ComplianceVoltage', 'ComplianceCurrent'], ret_dict)
         if self.SupportsSweeping:
-            self.pack_properties_to_dict(['SweepSampleTime', 'SweepSamplePoints', 'SweepStartValue', 'SweepEndValue'], ret_dict)
+            self.pack_properties_to_dict(['SweepSampleTime'], ret_dict)
+            sweep_mode = self._get_supported_sweep_mode()
+            if sweep_mode == 'LIST':
+                ret_dict['SweepMode'] = sweep_mode
+                ret_dict['SweepList'] = list(self.SweepList)
+            else:
+                if sweep_mode == 'SWE':
+                    ret_dict['SweepMode'] = sweep_mode
+                self.pack_properties_to_dict(
+                    ['SweepSamplePoints', 'SweepStartValue', 'SweepEndValue'], ret_dict
+                )
         return ret_dict
 
     def _set_current_config(self, dict_config, lab):
         assert dict_config['Type'] == self.__class__.__name__, 'Cannot set configuration to a Voltage-Source with a configuration that is of type ' + dict_config['Type']
+        requested_output = dict_config['Output']
+        self.Output = False
         self.Mode = dict_config['Mode']
         #Don't store SenseVoltage and SenseCurrent as they are only readonly properties!s
         #Only set the Source Property - shouldn't be allowed to set the measure-property!
@@ -156,17 +182,34 @@ class GENsmu(HALbase):
         self.ProbeType = dict_config['ProbeType']
         self.ComplianceVoltage = dict_config['ComplianceVoltage']
         self.ComplianceCurrent = dict_config['ComplianceCurrent']
-        self.Output = dict_config['Output']
-        self.ManualActivation = dict_config.get('ManualActivation', False)
         if self.SupportsSweeping:
+            requested_sweep_mode = dict_config.get('SweepMode')
+            if requested_sweep_mode is not None:
+                self.SweepMode = requested_sweep_mode
+
+            active_sweep_mode = self._get_supported_sweep_mode()
             if 'SweepSampleTime' in dict_config:
                 self.SweepSampleTime = dict_config['SweepSampleTime']
-            if 'SweepSamplePoints' in dict_config:
-                self.SweepSamplePoints = dict_config['SweepSamplePoints']
-            if 'SweepStartValue' in dict_config:
-                self.SweepStartValue = dict_config['SweepStartValue']
-            if 'SweepEndValue' in dict_config:
-                self.SweepEndValue = dict_config['SweepEndValue']
+            if active_sweep_mode == 'LIST':
+                if requested_sweep_mode == 'LIST':
+                    if 'SweepList' not in dict_config:
+                        raise ValueError('LIST sweep configuration is missing SweepList')
+                    self.SweepList = dict_config['SweepList']
+            else:
+                if 'SweepSamplePoints' in dict_config:
+                    self.SweepSamplePoints = dict_config['SweepSamplePoints']
+                if 'SweepStartValue' in dict_config:
+                    self.SweepStartValue = dict_config['SweepStartValue']
+                if 'SweepEndValue' in dict_config:
+                    self.SweepEndValue = dict_config['SweepEndValue']
+
+        self.ManualActivation = dict_config.get('ManualActivation', False)
+        self.Output = requested_output
+
+    def _get_supported_sweep_mode(self):
+        if hasattr(type(self._instr_smu), 'SweepMode'):
+            return self.SweepMode
+        return None
             
 
     def activate(self):
