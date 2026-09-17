@@ -80,9 +80,9 @@ class SW_BJT_RPi_Multi_Channel(InstrumentChannel):
 class SW_BJT_RPi_Multi(VisaInstrument):
     """
     RPi Driver for switch
-    P0 is dedicated state for reset, do not overwrite
-    
-    Given as: sw1: {"P0" : 10, "P1" : 3, "P2" : 5, "P3" : 7, "P4" : 11} etc.
+    P0 is dedicated state for reset, do not overwrite. PI's GPIO number are mapped to switch position below,
+        sw2={"P0": 12, "P1": 16, "P3": 26, "P2": 13, "P4": 6},
+        sw1={"P0": 17, "P1": 27, "P2": 22, "P3": 24, "P4": 23}
     """
     def __init__(self, name, address, **kwargs):
         super().__init__(name, address, terminator='\n', timeout=30)
@@ -104,4 +104,5 @@ class SW_BJT_RPi_Multi(VisaInstrument):
             return channel.readline()
         else :
             return None
+
 

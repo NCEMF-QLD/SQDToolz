@@ -96,7 +96,9 @@ class SW_DC_BBox(Instrument):
         return 'DC SMU Switch Box'
 
     def write(self, cmd):
+        time.sleep(0.2)
         self.ser.write(bytes(cmd))
+        time.sleep(0.2)
 
     def query(self, cmd):
         self.ser.reset_input_buffer()
