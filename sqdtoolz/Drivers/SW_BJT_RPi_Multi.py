@@ -79,30 +79,36 @@ class SW_BJT_RPi_Multi_Channel(InstrumentChannel):
 
 class SW_BJT_RPi_Multi(VisaInstrument):
     """
-    RPi Driver for switch
-    P0 is dedicated state for reset, do not overwrite. PI's GPIO number are mapped to switch position below,
-        sw2={"P0": 12, "P1": 16, "P3": 26, "P2": 13, "P4": 6},
-        sw1={"P0": 17, "P1": 27, "P2": 22, "P3": 24, "P4": 23}
+    RPi driver for two RF switches.
+
+    P0 is the dedicated reset state and should not be overwritten.
+
+    GPIO mapping:
+    sw1 -> {"P0": 17, "P1": 27, "P2": 22, "P3": 24, "P4": 23}
+    sw2 -> {"P0": 12, "P1": 16, "P2": 26, "P3": 13, "P4": 6}
     """
-    def __init__(self, name, address, **kwargs):
+
+    def __init__(self, name, address):
         super().__init__(name, address, terminator='\n', timeout=30)
-        #kwargs['init_instrument_only'] = True
 
         self._switches = {}
 
-        for cur_key in kwargs:
-            if cur_key.lower().startswith('sw'):
-                cur_ind = int(cur_key[2:])
-                cur_pins = kwargs[cur_key]
-                leName = cur_key
-                cur_module = SW_BJT_RPi_Multi_Channel(self, cur_ind, leName, cur_pins)
-                self.add_submodule(leName, cur_module)    #Name is christened inside the channel object...
-                self._switches[leName] = cur_module
+        sw1_pins = {"P0": 17, "P1": 27, "P2": 22, "P3": 24, "P4": 23}
+        sw2_pins = {"P0": 12, "P1": 16, "P2": 13, "P3": 26, "P4": 6}
+
+        sw1 = SW_BJT_RPi_Multi_Channel(self, 1, "sw1", sw1_pins)
+        sw2 = SW_BJT_RPi_Multi_Channel(self, 2, "sw2", sw2_pins)
+
+        self.add_submodule("sw1", sw1)
+        self.add_submodule("sw2", sw2)
+
+        self._switches["sw1"] = sw1
+        self._switches["sw2"] = sw2
 
     def read_line(self, channel):
-        if (not channel.channel.eof_received):
+        if not channel.channel.eof_received:
             return channel.readline()
-        else :
+        else:
             return None
 
 
